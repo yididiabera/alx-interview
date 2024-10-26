@@ -1,99 +1,67 @@
 #!/usr/bin/python3
-'''A script for parsing HTTP request logs and calculating statistics.
-'''
+'''log parsing solution'''
+import sys
 import re
+from signal import signal, SIGINT
 
 
-def extract_input(input_line):
-    '''Extracts information from a line of an HTTP request log.
+def initialize_log():
+    '''initializes log'''
+    status_codes = [200, 301, 400, 401, 403, 404, 405, 500]
+    log = {"file_size": 0,
+           "code_list": {str(code): 0 for code in status_codes}}
+    return log
 
-    Args:
-        input_line (str): The log line to extract data from.
 
-    Returns:
-        dict: A dictionary containing the status code and file size from the log line.
-    '''
-    log_pattern = (
-        r'\s*(?P<ip>\S+)\s*',
-        r'\s*\[(?P<date>\d+\-\d+\-\d+ \d+:\d+:\d+\.\d+)\]',
-        r'\s*"(?P<request>[^"]*)"\s*',
-        r'\s*(?P<status_code>\S+)',
-        r'\s*(?P<file_size>\d+)'
-    )
-    info = {
-        'status_code': 0,
-        'file_size': 0,
-    }
-    log_format = '{}\\-{}{}{}{}\\s*'.format(
-        log_pattern[0], log_pattern[1], log_pattern[2], log_pattern[3], log_pattern[4]
-    )
-    match = re.fullmatch(log_format, input_line)
+def parse_line(line, regex, log):
+    '''parses each line'''
+    match = regex.fullmatch(line)
+
     if match:
-        info['status_code'] = match.group('status_code')
-        info['file_size'] = int(match.group('file_size'))
-    return info
+        stat_code, file_size = match.group(1, 2)
+
+        log["file_size"] += int(file_size)
+
+        if stat_code.isdecimal() and stat_code in log["code_list"]:
+            log["code_list"][stat_code] += 1
+    return log
 
 
-def print_statistics(total_file_size, status_codes_stats):
-    '''Prints the total file size and the number of times each status code has been encountered.
-
-    Args:
-        total_file_size (int): The total size of all files.
-        status_codes_stats (dict): Dictionary of status codes and their counts.
-    '''
-    print('File size: {:d}'.format(total_file_size), flush=True)
-    for status_code in sorted(status_codes_stats.keys()):
-        count = status_codes_stats.get(status_code, 0)
-        if count > 0:
-            print('{:s}: {:d}'.format(status_code, count), flush=True)
+def print_codes(log):
+    '''prints stats'''
+    print("File size: {}".format(log['file_size']))
+    sorted_code_list = sorted(log["code_list"])
+    for code in sorted_code_list:
+        if log["code_list"][code] > 0:
+            print(f"{code}: {log['code_list'][code]}")
 
 
-def update_metrics(line, total_file_size, status_codes_stats):
-    '''Updates the metrics based on the current log line.
+def main():
+    '''Entry point'''
+    regex = re.compile(
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} - \[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d+\] "GET /projects/260 HTTP/1.1" (\d{3}) (\d+)'
+    )
+    log = initialize_log()
+    line_count = 0
 
-    Args:
-        line (str): The line from the log to process.
-        total_file_size (int): The current total file size.
-        status_codes_stats (dict): The current status code counts.
+    def handle_interrupt(signal_received, frame):
+        '''Handle CTRL+C interruption'''
+        print_codes(log)
+        sys.exit(0)
 
-    Returns:
-        int: The updated total file size.
-    '''
-    line_info = extract_input(line)
-    status_code = line_info.get('status_code', '0')
-    if status_code in status_codes_stats:
-        status_codes_stats[status_code] += 1
-    return total_file_size + line_info['file_size']
+    signal(SIGINT, handle_interrupt)
 
+    for line in sys.stdin:
+        line = line.strip()
+        line_count += 1
+        parse_line(line, regex, log)
 
-def run():
-    '''Starts the log parsing process and prints statistics every 10 lines or on interruption.
-    '''
-    line_num = 0
-    total_file_size = 0
-    status_codes_stats = {
-        '200': 0,
-        '301': 0,
-        '400': 0,
-        '401': 0,
-        '403': 0,
-        '404': 0,
-        '405': 0,
-        '500': 0,
-    }
-    try:
-        while True:
-            line = input()
-            total_file_size = update_metrics(
-                line, total_file_size, status_codes_stats
-            )
-            line_num += 1
-            if line_num % 10 == 0:
-                print_statistics(total_file_size, status_codes_stats)
-    except (KeyboardInterrupt, EOFError):
-        print_statistics(total_file_size, status_codes_stats)
+        if line_count % 10 == 0:
+            print_codes(log)
+
+    print_codes(log)
 
 
 if __name__ == '__main__':
-    run()
+    main()
 

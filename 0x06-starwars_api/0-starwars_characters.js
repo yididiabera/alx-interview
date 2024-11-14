@@ -9,29 +9,41 @@ if (!movieId) {
 
 const url = `https://swapi-api.alx-tools.com/api/films/${movieId}/`;
 
+// Function to fetch character name by URL
+function fetchCharacter(characterUrl) {
+    return new Promise((resolve, reject) => {
+        request(characterUrl, (error, response, body) => {
+            if (error) {
+                reject(error);
+            } else if (response.statusCode === 200) {
+                resolve(JSON.parse(body).name);
+            } else {
+                reject(new Error('Request failed'));
+            }
+        });
+    });
+}
+
+// Fetch movie details
 request(url, async function (error, response, body) {
     if (error) {
         console.error(error);
+        return;
     }
     if (response.statusCode === 200) {
         const characters = JSON.parse(body).characters;
-        function fetchCharacter(character) {
-            return new Promise((resolve, reject) => {
-                request(character, (error, response, body) => {
-                    if (error) {
-                        reject(error);
-                    }
-                    if (response.statusCode === 200) {
-                        resolve(JSON.parse(body).name);
-                    }
-                    reject(new Error('Request failed'));
-                })
-            })
+
+        // Fetch character names in order
+        for (const characterUrl of characters) {
+            try {
+                const characterName = await fetchCharacter(characterUrl);
+                console.log(characterName);
+            } catch (error) {
+                console.error(error);
+            }
         }
-        Promise.all(characters.map(fetchCharacter))
-            .then((characters) => {
-                characters.forEach((character) => console.log(character));
-            })
-            .catch((error) => console.error(error));
+    } else {
+        console.error('Failed to retrieve movie');
     }
 });
+
